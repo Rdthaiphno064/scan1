@@ -1,0 +1,4 @@
+ulimit -n999999; ulimit -u999999; ulimit -e999999
+apt install git -y && go get github.com/xinsnake/go-http-digest-auth-client
+go build a.go
+screen -S scan ./scan.sh
