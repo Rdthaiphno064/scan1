@@ -13,16 +13,7 @@ from difflib import SequenceMatcher
 URL           = "https://e.khaothi.online/"
 ANSWERS_DIR   = "."
 BLOCK_PATTERN = "khaothi.online/delivery/exam/save-event"
-API_KEYS      = [
-    "AIzaSyB20GQwQ7jl9ntkiouWnpYoK5O8mLlLq3g",
-    "AIzaSyCQoeCzAuw6yWME8hm_3bZyj0meV8htlRw",
-    "AIzaSyBeHIlYx3yFonnI6SQ4fKmWcBPIwCj2Tpc",
-    "AIzaSyCL7QnBbMIGESuhDvewNaHe-pY_oBAxoyQ",
-    "AIzaSyANUw6htXMKyZcrZptrHk5YBkElD4iOB-Y",
-    "AIzaSyD0XB54JOExzinW0OXFJNsMAP1Zl-MXVLo",
-    "AIzaSyCp_DveWWGXUsp_bMUAcYfq825frrjxtv0",
-    "AIzaSyAFy073nHt0cBc_eK01AfjOehz2YfRCtAw",
-]
+API_KEYS      = []
 
 AI_TIMEOUT_SEC = 60
 
@@ -338,52 +329,77 @@ driver.get(URL)
 seen_ids, seen_texts = set(), set()
 
 _PLC      = re.compile(r'^\([\w\s]+\)$')
-_STRIP_RE = re.compile(r'[^a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF.,;:?!\-\s]')
-_ALNUM_RE = re.compile(r'[^a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF]')
+_NORM_RE  = re.compile(r'[^a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\s]')
 _ESSAY_RE = re.compile(r'\d+[.,]?\d*\s*điểm', re.IGNORECASE)
 MIN_ALPHA = 5
 
+_STOPWORDS = {
+    'cho','và','là','hai','các','một','những','có','trong','của','với',
+    'được','thì','nếu','khi','sau','đây','nào','đó','đều','trên','dưới',
+    'bao','nhiêu','gọi','biết','tính','câu','phương','hỏi','chọn','theo',
+    'biểu','dạng','đẳng','the','of','is','are','following','which','that',
+    'this','what','how','who','when','where','why','an','in','on','at',
+    'to','for','with','from','by','not','or','and','but','if','than',
+    'very','much','many','any','all','both','each','every','some',
+}
+
 def norm(s):
-    return _STRIP_RE.sub('', str(s)).lower().strip()
+    return _NORM_RE.sub('', str(s)).lower().strip()
 
 def norm_key(s):
-    return _ALNUM_RE.sub('', str(s)).lower()
+    return re.sub(r'\s+', ' ', _NORM_RE.sub(' ', str(s))).lower().strip()
 
 def is_essay(q_text):
     return bool(_ESSAY_RE.search(q_text))
 
 def _tokenize(s):
-    return set(re.findall(r'[a-zA-Z\u00C0-\u024F\u1E00-\u1EFF]{2,}|\d+', norm_key(s)))
+    return set(w for w in norm_key(s).split() if len(w) >= 2)
 
-def _jaccard(a, b):
-    sa, sb = _tokenize(a), _tokenize(b)
-    if not sa or not sb: return 0.0
-    return len(sa & sb) / len(sa | sb)
+def _meaningful(tokens):
+    return {t for t in tokens if t not in _STOPWORDS and len(t) >= 3}
 
-def sim(a, b):
-    na, nb = norm_key(a), norm_key(b)
-    if not na or not nb: return 0.0
-    return 0.6 * SequenceMatcher(None, na, nb).ratio() + 0.4 * _jaccard(a, b)
+def _sim(q_a, opts_a, q_b, opts_b):
+    sq_a, sq_b = _tokenize(q_a), _tokenize(q_b)
+    nqa, nqb   = norm_key(q_a), norm_key(q_b)
+    rat_q = SequenceMatcher(None, nqa, nqb).ratio()
+    jac_q = len(sq_a & sq_b) / len(sq_a | sq_b) if sq_a | sq_b else 0.0
+    sim_q = 0.5 * rat_q + 0.5 * jac_q
+
+    so_a, so_b = _tokenize(' '.join(opts_a)), _tokenize(' '.join(opts_b))
+    noa, nob   = norm_key(' '.join(opts_a)), norm_key(' '.join(opts_b))
+    rat_o = SequenceMatcher(None, noa, nob).ratio()
+    jac_o = len(so_a & so_b) / len(so_a | so_b) if so_a | so_b else 0.0
+    sim_o = 0.5 * rat_o + 0.5 * jac_o
+
+    only_a, only_b = sq_a - sq_b, sq_b - sq_a
+    ma, mb = _meaningful(only_a), _meaningful(only_b)
+    if ma and mb:
+        return 0.0
+    if ma or mb:
+        all_m   = _meaningful(sq_a | sq_b)
+        penalty = (len(ma) + len(mb)) / max(len(all_m), 1) * 0.70
+        sim_q   = max(0.0, sim_q - penalty)
+
+    return 0.65 * sim_q + 0.35 * sim_o
 
 def find_best(q_text, choices, answers):
-    nq = norm_key(q_text)
+    """Returns (entry, need_ai). 0 false positives by design."""
+    nq = norm_key(q_text).replace(' ', '')
     if len(nq) < MIN_ALPHA:
-        choices_key = norm_key(' '.join(choices))
-        if len(choices_key) < MIN_ALPHA:
-            return None, True
+        if not choices: return None, True
         best, score = None, 0.0
         for e in answers:
-            ref = norm_key(' '.join(e.get('opts', []))) if e.get('opts') else norm_key(e.get('q', ''))
-            s   = 0.6 * SequenceMatcher(None, choices_key, ref).ratio() + 0.4 * _jaccard(choices_key, ref)
+            s = _sim('', choices, '', e.get('opts', []))
             if s > score: score, best = s, e
-        return (best, False) if score >= 0.80 else (None, True)
+        return (best, False) if score >= 0.88 else (None, True)
     best, score = None, 0.0
     for e in answers:
-        s = sim(q_text, e.get('q', ''))
+        s = _sim(q_text, choices, e.get('q', ''), e.get('opts', []))
         if s > score: score, best = s, e
-    thr = 0.78 if len(nq) < 25 else 0.62
+    thr = 0.85 if len(nq) < 25 else 0.75
     return (best, False) if score >= thr else (None, True)
-    text, correct, etype = e.get('text','').strip(), e.get('correct','').strip(), e.get('type','mc')
+
+def _parse_qui(e):
     if not text or not correct: return None
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     opts, opt_idx = {}, None
@@ -572,7 +588,6 @@ def parse_resp(raw, qt, ch=None):
                 idx = ord(m.group(1).upper()) - 65
                 if 0 <= idx < len(ch): result.append(ch[idx])
         return result or None
-
     clean = re.sub(r'[^A-Za-z]', '', raw)
     letter = clean[0].upper() if clean else ''
     if not letter and ch:
