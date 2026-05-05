@@ -139,32 +139,6 @@ def log(tag, *parts):
         _log_file.write(line + '\n')
     print(line)
 
-def _start_network_log():
-    req_map = {}
-    def on_request(params):
-        rid = params.get('requestId','')
-        req = params.get('request',{})
-        req_map[rid] = req
-        log('NET-REQ', req.get('method',''), req.get('url','')[:200],
-            'headers='+json.dumps(req.get('headers',{}), ensure_ascii=False)[:300],
-            'body='+str(req.get('postData',''))[:500])
-    def on_response(params):
-        rid  = params.get('requestId','')
-        resp = params.get('response',{})
-        log('NET-RSP', resp.get('status',''), resp.get('url','')[:200],
-            'headers='+json.dumps(resp.get('headers',{}), ensure_ascii=False)[:300])
-        try:
-            body = driver.execute_cdp_cmd('Network.getResponseBody', {'requestId': rid})
-            log('NET-BODY', rid[:12], str(body.get('body',''))[:2000])
-        except: pass
-    driver.add_cdp_listener('Network.requestWillBeSent', on_request)
-    driver.add_cdp_listener('Network.responseReceived', on_response)
-
-try:
-    _start_network_log()
-except Exception as _e:
-    log('LOG', f'Network listener not available: {_e}')
-
 _logged_qids = set()
 
 def log_question_html(scope, sid):
