@@ -304,7 +304,6 @@ seen_ids, seen_texts = set(), set()
 
 _PLC      = re.compile(r'^\([\w\s]+\)$')
 _NORM_RE  = re.compile(r'[^a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\s]')
-_ESSAY_RE = re.compile(r'\d+[.,]?\d*\s*điểm', re.IGNORECASE)
 MIN_ALPHA = 5
 
 _STOPWORDS = {
@@ -322,9 +321,6 @@ def norm(s):
 
 def norm_key(s):
     return re.sub(r'\s+', ' ', _NORM_RE.sub(' ', str(s))).lower().strip()
-
-def is_essay(q_text):
-    return bool(_ESSAY_RE.search(q_text))
 
 def _tokenize(s):
     return set(w for w in norm_key(s).split() if len(w) >= 2)
@@ -495,6 +491,8 @@ def qtype(scope):
     cls = scope.get_attribute('class') or ''
     if 'type_14' in cls: return 'table'
     if 'type_4'  in cls: return 'fill'
+    if scope.find_elements(By.CSS_SELECTOR, '.ctq-input'): return 'fill'
+    if scope.find_elements(By.CSS_SELECTOR, '.answer-essay'): return 'essay'
     return 'single'
 
 def get_choices(scope, qt):
@@ -516,12 +514,14 @@ def build_text(el):
     return f"{raw}\n[Math: {math.strip()}]" if math.strip() else raw
 
 def _snapshot(body, scope, passage):
-    qt       = qtype(scope)
-    ch       = get_choices(scope, qt)
-    q_text   = build_text(body)
-    img_data = cdp_shot(scope)
+    qt        = qtype(scope)
+    ch        = get_choices(scope, qt)
+    q_text    = build_text(body)
+    # Screenshot only when body actually has visual math/img elements
+    use_img   = has_visual(body)
+    img_data  = cdp_shot(scope) if use_img else None
     return {'qt': qt, 'ch': ch, 'q_text': q_text, 'passage': passage,
-            'use_img': True, 'img_data': img_data}
+            'use_img': use_img, 'img_data': img_data}
 
 def _tp(q, ch, qt, passage=''):
     ctx  = f"[Context]\n{passage}\n\n" if passage else ''
@@ -551,9 +551,8 @@ def _ip(ch, qt, passage=''):
 def parse_resp(raw, qt, ch=None):
     raw = raw.strip()
     if qt == 'fill':
-        val = re.sub(r'\.(\d)', r',\1', raw)
-        m   = re.match(r'^-?\d+[,.]?\d*$', val.replace(',', '.').replace(',', ','))
-        return [val] if val else [raw]
+        val = re.sub(r'(\d)\.(\d)', r'\1,\2', raw.strip())
+        return [val] if val else None
     if qt == 'table':
         result = []
         for p in re.split(r'[,\n]+', raw):
@@ -564,7 +563,7 @@ def parse_resp(raw, qt, ch=None):
         return result or None
     clean = re.sub(r'[^A-Za-z]', '', raw)
     letter = clean[0].upper() if clean else ''
-    if not letter and ch:
+    if not letter:
         found = re.findall(r'\b([A-Z])\b', raw.upper())
         letter = found[0] if found else ''
     if not letter or not ch: return None
@@ -655,11 +654,11 @@ def each_block(fn):
                             continue
                         q_text = b.text.strip()
                         if not q_text or len(q_text) < 3: continue
-                        if is_essay(q_text): continue
                         try: scope = b.find_element(By.XPATH, './ancestor::*[contains(@id,"ItemPreview__question-")][1]')
                         except: scope = c
                         sid = scope.get_attribute('id') or ''
                         qt  = qtype(scope)
+                        if qt == 'essay': continue
                         ch  = get_choices(scope, qt)
                         if sid and sid in gemini_cache:
                             fn(b, scope, gemini_cache[sid]); continue
