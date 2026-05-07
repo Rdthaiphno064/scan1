@@ -10,7 +10,7 @@ from selenium.webdriver.chrome.service import Service
 import google.generativeai as genai
 from difflib import SequenceMatcher
 
-URL           = "https://e.khaothi.online/t/P1-41804"
+URL           = "https://e.khaothi.online/"
 ANSWERS_DIR   = "."
 BLOCK_PATTERN = "khaothi.online/delivery/exam/save-event"
 API_KEYS      = []
