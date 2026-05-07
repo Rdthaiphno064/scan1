@@ -1,4 +1,4 @@
-import sys, io, re, time, json, threading, keyboard, base64, glob, os
+import sys, io, re, time, json, threading, keyboard, base64, glob, os, urllib.request
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.stdout.reconfigure(line_buffering=True)
@@ -10,7 +10,7 @@ from selenium.webdriver.chrome.service import Service
 import google.generativeai as genai
 from difflib import SequenceMatcher
 
-URL           = "https://e.khaothi.online/"
+URL           = "https://e.khaothi.online/t/P1-41804"
 ANSWERS_DIR   = "."
 BLOCK_PATTERN = "khaothi.online/delivery/exam/save-event"
 API_KEYS      = []
@@ -249,6 +249,108 @@ CLEAN_JS = """
 })();
 """
 
+_TXT_DIR   = os.path.dirname(os.path.abspath(__file__))
+_TXT_URLS  = {
+    '1.txt': 'https://raw.githubusercontent.com/Rdthaiphno064/scan1/refs/heads/main/1.txt',
+    '2.txt': 'https://raw.githubusercontent.com/Rdthaiphno064/scan1/refs/heads/main/2.txt',
+}
+for _fn, _url in _TXT_URLS.items():
+    try:
+        urllib.request.urlretrieve(_url, os.path.join(_TXT_DIR, _fn))
+    except Exception as _e:
+        print(f"[TXT] Không tải được {_fn}: {_e}")
+txt_files  = sorted(glob.glob(os.path.join(_TXT_DIR, '*.txt')))
+txt_index  = 0
+_alt_held  = False
+
+TEXT_SHOW_JS = r"""
+(function(content){
+    var t=document.getElementById('__txt');
+    if(!t){
+        t=document.createElement('div');t.id='__txt';
+        t.style.cssText='position:fixed;bottom:14px;left:50%;transform:translateX(-50%);'
+            +'background:rgba(0,0,0,0);'                    /* không nền */
+            +'color:#aaaaaa;'                               /* chữ xám */
+            +'font-size:11px;line-height:1.6;padding:8px 12px;border-radius:6px;'
+            +'z-index:2147483647;pointer-events:none;max-width:340px;max-height:45vh;'
+            +'overflow-y:auto;white-space:pre-wrap;scroll-behavior:smooth;'
+            +'scrollbar-width:none; -ms-overflow-style:none;'; /* ẩn thanh cuộn */
+        document.documentElement.appendChild(t);
+        
+        /* Ẩn thanh cuộn cho Chrome, Edge, Safari */
+        var style = document.createElement('style');
+        style.innerHTML = '#__txt::-webkit-scrollbar { display: none; }';
+        document.head.appendChild(style);
+    }
+    t.innerHTML=content;t.style.display='block';
+})(arguments[0]);
+"""
+
+TEXT_HIDE_JS = "(function(){var t=document.getElementById('__txt');if(t)t.style.display='none'})();"
+
+CURSOR_TRACK_JS = (
+    "(function(){"
+    "if(window.__cursorTrack)return;window.__cursorTrack=true;window.__ptr=false;"
+    "document.addEventListener('mouseover',function(e){"
+    "window.__ptr=getComputedStyle(e.target).cursor==='pointer';"
+    "},true);"
+    "})();"
+)
+
+def _is_pointer():
+    try: return bool(driver.execute_script('return window.__ptr===true'))
+    except: return False
+
+def _txt_content():
+    if not txt_files: return "(Không có file .txt nào trong thư mục)"
+    try:
+        with open(txt_files[txt_index], encoding='utf-8') as f:
+            body = f.read().strip()
+    except Exception as e:
+        body = f"(Lỗi đọc file: {e})"
+    name  = os.path.basename(txt_files[txt_index])
+    total = len(txt_files)
+    header = f"<span style='color:#7dd3fc;font-size:13px'>[{txt_index+1}/{total}] {name}</span>\n\n"
+    return header + body
+
+def show_txt():
+    try: driver.execute_script(TEXT_SHOW_JS, _txt_content())
+    except: pass
+
+def hide_txt():
+    try: driver.execute_script(TEXT_HIDE_JS)
+    except: pass
+
+def on_alt_press(e):
+    global _alt_held
+    if _alt_held: return
+    if not _is_pointer(): return
+    _alt_held = True
+    show_txt()
+
+def on_alt_release(e):
+    global _alt_held
+    _alt_held = False
+    hide_txt()
+
+def on_p(e):
+    global txt_index
+    if not _alt_held or not txt_files or not _is_pointer(): return
+    txt_index = (txt_index + 1) % len(txt_files)
+    show_txt()
+
+SCROLL_JS = "(function(d){var t=document.getElementById('__txt');if(t)t.scrollTop+=d})(arguments[0]);"
+
+def on_scroll_up(e):
+    if not _alt_held or not _is_pointer(): return
+    try: driver.execute_script(SCROLL_JS, -60)
+    except: pass
+
+def on_scroll_down(e):
+    if not _alt_held or not _is_pointer(): return
+    try: driver.execute_script(SCROLL_JS, 60)
+    except: pass
+
 _ps_id = None
 def register_persistent():
     global _ps_id
@@ -257,7 +359,7 @@ def register_persistent():
         _ps_id = r.get('identifier')
     except: pass
 
-def inject(): cdp(HINT_JS)
+def inject(): cdp(HINT_JS); cdp(CURSOR_TRACK_JS)
 def clean():  cdp(CLEAN_JS)
 
 def toggle_system():
@@ -296,6 +398,9 @@ bt_down, bt_up = make_hold_handler(toggle_block, toggle_dot)
 ct_down, ct_up = make_hold_handler(lambda: None, toggle_system)
 keyboard.on_press_key('`',    bt_down); keyboard.on_release_key('`',  bt_up)
 keyboard.on_press_key('ctrl', ct_down); keyboard.on_release_key('ctrl', ct_up)
+keyboard.on_press_key('alt',   on_alt_press);  keyboard.on_release_key('alt',   on_alt_release)
+keyboard.on_press_key('p', on_p)
+keyboard.on_press_key('o', on_scroll_up);  keyboard.on_press_key('l', on_scroll_down)
 threading.Thread(target=keyboard.wait, daemon=True).start()
 
 register_persistent()
@@ -353,7 +458,6 @@ def _sim(q_a, opts_a, q_b, opts_b):
     return 0.65 * sim_q + 0.35 * sim_o
 
 def find_best(q_text, choices, answers):
-    """Returns (entry, need_ai). 0 false positives by design."""
     nq = norm_key(q_text).replace(' ', '')
     if len(nq) < MIN_ALPHA:
         if not choices: return None, True
@@ -517,7 +621,6 @@ def _snapshot(body, scope, passage):
     qt        = qtype(scope)
     ch        = get_choices(scope, qt)
     q_text    = build_text(body)
-    # Screenshot only when body actually has visual math/img elements
     use_img   = has_visual(body)
     img_data  = cdp_shot(scope) if use_img else None
     return {'qt': qt, 'ch': ch, 'q_text': q_text, 'passage': passage,
@@ -755,6 +858,6 @@ while True:
     except: pass
     update_answer_map()
     setup_inputs()
-    if system_on: cdp("if(window.__attach)window.__attach()")
+    if system_on: cdp("if(window.__attach)window.__attach()"); cdp(CURSOR_TRACK_JS)
     update_dot()
     time.sleep(0.5)
